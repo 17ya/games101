@@ -12,10 +12,10 @@
 	"license": "ISC",
 	"dependencies": {
 		"gl-matrix": "^3.4.3",
-		"three": "^0.149.0",
-		"three-obj-mtl-loader": "^1.0.3"
+		"three": "^0.149.0"
 	},
 	"devDependencies": {
+		"file-loader": "^6.2.0",
 		"html-webpack-plugin": "^5.5.0",
 		"webpack": "^5.75.0",
 		"webpack-cli": "^5.0.1",

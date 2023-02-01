@@ -1,14 +1,17 @@
-import { vec4, mat4, vec3 } from 'gl-matrix';
-import * as THREE from 'three';
-// import { OBJLoader } from 'three-obj-mtl-loader';
-// import THREE from './node_modules/three/build/three.js';
-// import { OBJLoader, MTLLoader } from './node_modules/three-obj-mtl-loader/index.js';
+// src
+import './models/spot_triangulated_good.obj';
+// pkg
+import { vec4, mat4, vec3, vec2 } from 'gl-matrix';
+
+import { Matrix4, Vector2, Vector3, Vector4 } from 'three';
+import { OBJLoader } from './js/OBJLoader';
 
 const { cos, sin, tan, PI } = Math;
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
+let angle = 0;
 const frameBuffer = {};
 const zBuffer = {};
 
@@ -21,11 +24,14 @@ function get_view_matrix(eye_pos) {
 }
 
 //旋转矩阵
-function get_model_matrix(rotation_angle) {
+function get_model_matrix(rotation_angle, axis) {
 	const radian = (rotation_angle * PI) / 180;
-	// Create the model matrix for rotating the triangle around the Z axis
-	const model = mat4.fromValues(cos(radian), -sin(radian), 0, 0, sin(radian), cos(radian), 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-	return model;
+
+	const model = new Matrix4();
+
+	model.makeRotationAxis(axis, radian);
+
+	return model.elements;
 }
 
 //透视投影矩阵
@@ -54,10 +60,15 @@ function get_projection_matrix(eye_fov, aspect_ratio, zNear, zFar) {
 
 //光栅化
 function rasterize_triangle(t, [r, g, b]) {
-	for (let x = 0; x < canvas.height; x++) {
-		for (let y = 0; y < canvas.width; y++) {
-			if (insideTriangle(x, y, t)) {
-				const [, , z] = t[0];
+	const minX = Math.min(t[0].x, t[1].x, t[2].x);
+	const maxX = Math.max(t[0].x, t[1].x, t[2].x);
+	const minY = Math.min(t[0].y, t[1].y, t[2].y);
+	const maxY = Math.max(t[0].y, t[1].y, t[2].y);
+
+	for (let x = minX; x <= maxX; x++) {
+		for (let y = minY; y <= maxY; y++) {
+			if (insideTriangle(x + 0.5, y + 0.5, t)) {
+				const { z } = t[0];
 
 				if (!zBuffer[`${x}_${y}`]) zBuffer[`${x}_${y}`] = -Infinity;
 
@@ -76,13 +87,14 @@ function rasterize_triangle(t, [r, g, b]) {
 	}
 }
 
+let a = 1;
 // 判断点是否在三角形
-function insideTriangle(x, y, v) {
+function insideTriangle(x, y, t) {
 	const P = [x, y];
 
-	const A = v[0];
-	const B = v[1];
-	const C = v[2];
+	const A = [t[0].x, t[0].y];
+	const B = [t[1].x, t[1].y];
+	const C = [t[2].x, t[2].y];
 
 	const AP = vec3.sub([], P, A);
 	const BP = vec3.sub([], P, B);
@@ -101,10 +113,16 @@ function insideTriangle(x, y, v) {
 	return false;
 }
 
-function main(angle = 0) {
+function normal_fragment_shader(v) {
+	const color = new Vector3(v.x, v.y, v.z).add(new Vector3(1, 1, 1)).divideScalar(2);
+	// console.log(color.x / 255, color.y / 255, color.z / 255);
+	return [color.x * 255, color.y * 255, color.z * 255];
+}
+
+function main(angle = 90, axis = new Vector3(0, 1, 0)) {
 	const eye_pos = [0, 0, 5];
 
-	const model = get_model_matrix(angle);
+	const model = get_model_matrix(angle, axis);
 	const view = get_view_matrix(eye_pos);
 	const projection = get_projection_matrix(45, 1, 0.1, 50);
 
@@ -113,49 +131,76 @@ function main(angle = 0) {
 	const f1 = (50 - 0.1) / 2.0;
 	const f2 = (50 + 0.1) / 2.0;
 
-	// alert(1);
-
-	// for (let i = 0; i < v.length; i++) {
-	// 	for (let j = 0; j < v[i].length; j++) {
-	// 		// mpv变换
-	// 		let [x, y, z, w] = ve4MultiplyMat4(vec4.create(), v[i][j], mvp);
-	// 		// 坐标转换-1到1之间
-
-	// 		x /= w;
-	// 		y /= w;
-	// 		z /= w;
-	// 		// 转换屏幕坐标
-	// 		x = 0.5 * 700 * (x + 1.0);
-	// 		y = 0.5 * 700 * (y + 1.0);
-	// 		z = z * f1 * f2;
-
-	// 		v[i][j] = vec4.fromValues(x, y, z, w);
-	// 	}
-	// }
-
-	const loader = new THREE.ObjectLoader();
+	const loader = new OBJLoader();
 
 	loader.load('./models/spot_triangulated_good.obj', (materials) => {
-		console.log(materials);
+		const mesh = materials.children[0];
+		const { geometry } = mesh;
+
+		//顶点
+		const position = geometry.attributes.position.array;
+		let position_v4 = [];
+
+		//法线
+		const normal = geometry.attributes.normal.array;
+		const normal_v4 = [];
+		const color3 = [];
+
+		for (let i = 0; i < position.length; i += 3) {
+			// mvp变换
+			let [x, y, z, w] = ve4MultiplyMat4([], [position[i], position[i + 1], position[i + 2], 1], mvp);
+
+			color3[i] = normal_fragment_shader(new Vector3(x, y, z));
+
+			// 坐标转换-1到1之间
+			x /= w;
+			y /= w;
+			z /= w;
+
+			// 转换屏幕坐标
+			x = 0.5 * 700 * (x + 1.0);
+			y = 0.5 * 700 * (y + 1.0);
+			z = z * f1 * f2;
+
+			position_v4.push(new Vector4(x, y, z, w));
+		}
+
+		position_v4 = position_v4
+			.map((n, i) => {
+				if (i % 3 === 0) {
+					return [n, position_v4[i + 1], position_v4[i + 2]];
+				}
+			})
+			.filter((n) => n);
+
+		if (canvas) {
+			ctx.clearRect(0, 0, 700, 700);
+
+			for (let i = 0; i < position_v4.length; i++) {
+				rasterize_triangle(position_v4[i], color3[i * 3]);
+			}
+		}
 	});
-
-	// if (canvas) {
-	// 	ctx.clearRect(0, 0, 700, 700);
-	// 	const color = [
-	// 		[217.0, 238.0, 185.0],
-	// 		[185.0, 217.0, 238.0],
-	// 	];
-
-	// 	for (let i = 0; i < v.length; i++) {
-	// 		const [r, g, b] = color[i];
-	// 		rasterize_triangle(v[i], color[i]);
-	// 	}
-	// }
 }
 
 main();
 
-document.body.append('z-buffer');
+document.addEventListener('keydown', (e) => {
+	if (e.code === 'ArrowRight') {
+		angle -= 1;
+		main(angle, new Vector3(0, 1, 0));
+	}
+	if (e.code === 'ArrowUp') {
+		angle -= 1;
+		main(angle, new Vector3(1, 0, 0));
+	}
+	if (e.code === 'ArrowDown') {
+		angle -= 1;
+		main(angle, new Vector3(0, 0, 1));
+	}
+});
+
+document.body.append('shader');
 
 function ve4MultiplyMat4(out, a, m) {
 	var x = a[0],

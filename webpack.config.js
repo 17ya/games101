@@ -15,4 +15,20 @@ module.exports = {
 			template: __dirname + '/src/index.html',
 		}),
 	],
+	module: {
+		rules: [
+			{
+				// 打包obj
+				test: /\.(obj)$/,
+				use: [
+					{
+						loader: 'file-loader',
+						options: {
+							name: 'models/[name].[ext]',
+						},
+					},
+				],
+			},
+		],
+	},
 };
