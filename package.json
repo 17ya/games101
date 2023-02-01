@@ -1,0 +1,24 @@
+{
+	"name": "game101",
+	"version": "1.0.0",
+	"description": "",
+	"main": "page0.js",
+	"scripts": {
+		"build": "webpack",
+		"start": "webpack serve --open"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"gl-matrix": "^3.4.3",
+		"three": "^0.149.0",
+		"three-obj-mtl-loader": "^1.0.3"
+	},
+	"devDependencies": {
+		"html-webpack-plugin": "^5.5.0",
+		"webpack": "^5.75.0",
+		"webpack-cli": "^5.0.1",
+		"webpack-dev-server": "^4.11.1"
+	}
+}
