@@ -1,12 +1,11 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const path = require('path');
 
 module.exports = {
 	mode: 'development',
-	entry: './src/pa3.js',
+	entry: './src/pa3.ts',
 	output: {
 		path: __dirname + '/dist',
-		filename: 'build.js',
+		filename: 'bundle.js',
 	},
 	plugins: [
 		new HtmlWebpackPlugin({
@@ -15,8 +14,17 @@ module.exports = {
 			template: __dirname + '/src/index.html',
 		}),
 	],
+	resolve: {
+		extensions: ['.ts', '.js'],
+	},
 	module: {
 		rules: [
+			{
+				// 打包ts
+				test: /\.ts$/,
+				use: 'ts-loader',
+				exclude: /node-modules/,
+			},
 			{
 				// 打包obj
 				test: /\.(obj)$/,
