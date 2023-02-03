@@ -45,7 +45,7 @@ function get_projection_matrix(eye_fov: number, aspect_ratio: number, zNear: num
 
 	const scale = new Matrix4().set(2 / (r - l), 0, 0, 0, 0, 2 / (t - b), 0, 0, 0, 0, 2 / (n - f), 0, 0, 0, 0, 1).transpose();
 
-	return persp2Ortho.multiply(trans.multiply(scale));
+	return persp2Ortho.multiply(scale.multiply(trans));
 }
 
 function normal_fragment_shader(v: Vector4) {
@@ -65,11 +65,12 @@ function main() {
 	loader.load('./models/spot_triangulated_good.obj', (materials: any) => {
 		const mesh = materials.children[0];
 		//@ts-ignore
+		const count = mesh.geometry.attributes.position.count;
 		const position = mesh.geometry.attributes.position.array;
 		const normal = mesh.geometry.attributes.normal.array;
 		const uv = mesh.geometry.attributes.uv.array;
 
-		for (let i = 0; i < position.length; i += 3) {
+		for (let i = 0; i < count; i += 3) {
 			const t = new Triangle();
 			for (let j = 0; j < 9; j += 3) {
 				t.setVertex(new Vector4(position[i * 3 + j], position[i * 3 + j + 1], position[i * 3 + j + 2]));

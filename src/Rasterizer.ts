@@ -1,4 +1,4 @@
-import { mat4 } from 'gl-matrix';
+import { vec2, vec3 } from 'gl-matrix';
 import { Vector4, Matrix4, Vector2, Vector3 } from 'three';
 import Triangle from './Triangle';
 
@@ -56,73 +56,54 @@ class Rasterizer {
 		const B = new Vector2(v[1].x, v[1].y);
 		const C = new Vector2(v[2].x, v[2].y);
 
-		const AP = P.sub(A);
-		const BP = P.sub(B);
-		const CP = P.sub(C);
-		const AB = B.sub(A);
-		const BC = C.sub(B);
-		const CA = A.sub(C);
+		const AP = P.clone().sub(A);
+		const BP = P.clone().sub(B);
+		const CP = P.clone().sub(C);
+		const AB = B.clone().sub(A);
+		const BC = C.clone().sub(B);
+		const CA = A.clone().sub(C);
 
 		const eq1 = AB.x * AP.y - AB.y * AP.x;
 		const eq2 = BC.x * BP.y - BC.y * BP.x;
 		const eq3 = CA.x * CP.y - CA.y * CP.x;
-
 		if (eq1 > 0 && eq2 > 0 && eq3 > 0) return true;
 		else if (eq1 < 0 && eq2 < 0 && eq3 < 0) return true;
-
 		return false;
 	}
 
 	rasterizeTriangle(t: Triangle, viewPos: Vector3) {
 		const v = t.toVector4();
 
-		const minX = Math.min(v[0].x, v[1].x, v[2].x);
-		const maxX = Math.max(v[0].x, v[1].x, v[2].x);
-		const minY = Math.min(v[0].y, v[1].y, v[2].y);
-		const maxY = Math.max(v[0].y, v[1].y, v[2].y);
+		const minX = Math.floor(Math.min(v[0].x, v[1].x, v[2].x));
+		const maxX = Math.ceil(Math.max(v[0].x, v[1].x, v[2].x));
+		const minY = Math.floor(Math.min(v[0].y, v[1].y, v[2].y));
+		const maxY = Math.ceil(Math.max(v[0].y, v[1].y, v[2].y));
 
-		for (let i = 0; i < v.length; i++) {
-			const { x, y } = v[i];
-
-			if (this.ctx) {
-				this.ctx.fillStyle = `white`;
-				this.ctx.beginPath();
-				this.ctx.arc(x, y, 1, 0, 2 * Math.PI);
-				this.ctx.closePath();
-				this.ctx.fill();
+		// this.drawFace(t);
+		for (let x = minX; x <= maxX; x++) {
+			for (let y = minY; y <= maxY; y++) {
+				if (this.insideTriangle(x + 0.5, y + 0.5, v)) {
+					const z = v[0].z;
+					const { x: r, y: g, z: b } = t.color[0];
+					if (!this.depth_buf[this.getIndex(x, y)]) this.depth_buf[this.getIndex(x, y)] = -Infinity;
+					if (z > this.depth_buf[this.getIndex(x, y)] && this.ctx) {
+						this.depth_buf[this.getIndex(x, y)] = z;
+						this.ctx.fillStyle = `yellow`;
+						this.ctx.beginPath();
+						this.ctx.arc(x, y, 1, 0, 2 * Math.PI);
+						this.ctx.closePath();
+						this.ctx.fill();
+					}
+				}
 			}
 		}
-
-		// for (let x = minX; x <= maxX; x++) {
-		// 	for (let y = minY; y <= maxY; y++) {
-		// 		if (this.insideTriangle(x, y, v)) {
-		// 			const z = v[0].z;
-		// 			const { x: r, y: g, z: b } = t.color[0];
-
-		// 			if (!this.depth_buf[this.getIndex(x, y)]) this.depth_buf[this.getIndex(x, y)] = -Infinity;
-
-		// 			if (z > this.depth_buf[this.getIndex(x, y)] && this.ctx) {
-		// 				this.depth_buf[this.getIndex(x, y)] = z;
-
-		// 				this.ctx.fillStyle = `white`;
-		// 				this.ctx.beginPath();
-		// 				this.ctx.arc(x, y, 1, 0, 2 * Math.PI);
-		// 				this.ctx.closePath();
-		// 				this.ctx.fill();
-		// 			}
-		// 		}
-		// 	}
-		// }
 	}
 
 	draw(triangleList: Triangle[]) {
 		const f1 = (50 - 0.1) / 2.0;
 		const f2 = (50 + 0.1) / 2.0;
 
-		//@ts-ignore
 		const mvp = this.model.multiply(this.view.multiply(this.projection));
-
-		console.log(mvp);
 
 		for (let i = 0; i < triangleList.length; i++) {
 			const t = triangleList[i];
@@ -162,6 +143,35 @@ class Rasterizer {
 			const viewspace_pos = new Vector3();
 
 			this.rasterizeTriangle(newtri, viewspace_pos);
+		}
+	}
+
+	drawDot(t: Triangle) {
+		const v = t.toVector4();
+		for (let i = 0; i < v.length; i++) {
+			const { x, y } = v[i];
+			if (this.ctx) {
+				this.ctx.fillStyle = `white`;
+				this.ctx.beginPath();
+				this.ctx.arc(x, y, 1, 0, 2 * Math.PI);
+				this.ctx.closePath();
+				this.ctx.fill();
+			}
+		}
+	}
+
+	drawFace(t: Triangle) {
+		const v = t.toVector4();
+		for (let j = 0; j < v.length; j++) {
+			if (!this.ctx) continue;
+			const { x, y } = v[j];
+			const { x: nextX, y: nextY } = v[(j + 1) % 3 === 0 ? (j + 1) / 3 - 1 : j + 1];
+			this.ctx.beginPath();
+			this.ctx.strokeStyle = 'white';
+			this.ctx.lineWidth = 1;
+			this.ctx.moveTo(x, y);
+			this.ctx.lineTo(nextX, nextY);
+			this.ctx.stroke();
 		}
 	}
 
