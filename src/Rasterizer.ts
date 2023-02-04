@@ -1,5 +1,6 @@
 import { vec2, vec3 } from 'gl-matrix';
-import { Vector4, Matrix4, Vector2, Vector3 } from 'three';
+import { Vector4, Matrix4, Vector2, Vector3, Vector2Tuple } from 'three';
+import Shader from './Shader';
 import Triangle from './Triangle';
 
 class Rasterizer {
@@ -50,6 +51,16 @@ class Rasterizer {
 		this.fragmentShader = frag_shader;
 	}
 
+	setPixel(x: number, y: number, color: Vector3) {
+		if (this.ctx) {
+			this.ctx.fillStyle = `rgb(${color.x},${color.y},${color.z})`;
+			this.ctx.beginPath();
+			this.ctx.arc(x, y, 1, 0, 2 * Math.PI);
+			this.ctx.closePath();
+			this.ctx.fill();
+		}
+	}
+
 	insideTriangle(x: number, y: number, v: Vector4[]) {
 		const P = new Vector2(x, y);
 		const A = new Vector2(v[0].x, v[0].y);
@@ -66,6 +77,7 @@ class Rasterizer {
 		const eq1 = AB.x * AP.y - AB.y * AP.x;
 		const eq2 = BC.x * BP.y - BC.y * BP.x;
 		const eq3 = CA.x * CP.y - CA.y * CP.x;
+
 		if (eq1 > 0 && eq2 > 0 && eq3 > 0) return true;
 		else if (eq1 < 0 && eq2 < 0 && eq3 < 0) return true;
 		return false;
@@ -79,20 +91,43 @@ class Rasterizer {
 		const minY = Math.floor(Math.min(v[0].y, v[1].y, v[2].y));
 		const maxY = Math.ceil(Math.max(v[0].y, v[1].y, v[2].y));
 
-		// this.drawFace(t);
+		const pos = [
+			[0.25, 0.25],
+			[0.75, 0.25],
+			[0.25, 0.75],
+			[0.75, 0.75],
+		];
+
 		for (let x = minX; x <= maxX; x++) {
 			for (let y = minY; y <= maxY; y++) {
-				if (this.insideTriangle(x + 0.5, y + 0.5, v)) {
-					const z = v[0].z;
-					const { x: r, y: g, z: b } = t.color[0];
+				// msaa
+				let count = 0;
+				for (let MSAA_4 = 0; MSAA_4 < 4; MSAA_4++) {
+					if (this.insideTriangle(x + pos[MSAA_4][0], y + pos[MSAA_4][1], v)) {
+						++count;
+					}
+				}
+				if (count) {
+					const [alpha, beta, gamma] = this.computeBarycentric2D(x + 0.5, y + 0.5, t.v);
+
+					const Z = 1.0 / (alpha / v[0].w + beta / v[1].w + gamma / v[2].w);
+					let zp = (alpha * v[0].z) / v[0].w + (beta * v[1].z) / v[1].w + (gamma * v[2].z) / v[2].w;
+					zp *= Z;
+
 					if (!this.depth_buf[this.getIndex(x, y)]) this.depth_buf[this.getIndex(x, y)] = -Infinity;
-					if (z > this.depth_buf[this.getIndex(x, y)] && this.ctx) {
-						this.depth_buf[this.getIndex(x, y)] = z;
-						this.ctx.fillStyle = `yellow`;
-						this.ctx.beginPath();
-						this.ctx.arc(x, y, 1, 0, 2 * Math.PI);
-						this.ctx.closePath();
-						this.ctx.fill();
+
+					if (zp > this.depth_buf[this.getIndex(x, y)]) {
+						this.depth_buf[this.getIndex(x, y)] = zp;
+						const interpolated_color = this.interpolate(alpha, beta, gamma, t.color[0], t.color[1], t.color[2], 1) as Vector3;
+						const interpolated_normal = this.interpolate(alpha, beta, gamma, t.normal[0], t.normal[1], t.normal[2], 1) as Vector3;
+						// const interpolated_texcoords = this.interpolate(alpha, beta, gamma, t.texCoord[0], t.texCoord[1], t.texCoord[2], 1) as Vector2;
+						// const interpolated_shadingcoords =  this.interpolate(alpha, beta, gamma, view_pos[0], view_pos[1], view_pos[2], 1);
+
+						const payload = new Shader(interpolated_color, interpolated_normal.normalize());
+
+						const pixelColor = this.fragmentShader(payload);
+
+						this.setPixel(x, y, pixelColor);
 					}
 				}
 			}
@@ -103,7 +138,7 @@ class Rasterizer {
 		const f1 = (50 - 0.1) / 2.0;
 		const f2 = (50 + 0.1) / 2.0;
 
-		const mvp = this.model.multiply(this.view.multiply(this.projection));
+		const mvp = this.model.clone().multiply(this.view.clone()).multiply(this.projection);
 
 		for (let i = 0; i < triangleList.length; i++) {
 			const t = triangleList[i];
@@ -125,7 +160,7 @@ class Rasterizer {
 				newtri.setVertex(v[vi]);
 			}
 
-			const inv_trans = this.view.multiply(this.model).invert().transpose();
+			const inv_trans = this.model.clone().multiply(this.view.clone()).invert().transpose();
 			const n = [new Vector4(t.normal[0].x, t.normal[0].y, t.normal[0].z, 0).applyMatrix4(inv_trans), new Vector4(t.normal[1].x, t.normal[1].y, t.normal[1].z, 0).applyMatrix4(inv_trans), new Vector4(t.normal[2].x, t.normal[2].y, t.normal[2].z, 0).applyMatrix4(inv_trans)];
 
 			for (let i = 0; i < 3; i++) {
@@ -195,6 +230,34 @@ class Rasterizer {
 		const W = x * m4.elements[12] + y * m4.elements[13] + z * m4.elements[14] + w * m4.elements[15];
 
 		return new Vector4(X, Y, Z, W);
+	}
+
+	computeBarycentric2D(x: number, y: number, v: Vector4[]) {
+		const c1 = (x * (v[1].y - v[2].y) + (v[2].x - v[1].x) * y + v[1].x * v[2].y - v[2].x * v[1].y) / (v[0].x * (v[1].y - v[2].y) + (v[2].x - v[1].x) * v[0].y + v[1].x * v[2].y - v[2].x * v[1].y);
+		const c2 = (x * (v[2].y - v[0].y) + (v[0].x - v[2].x) * y + v[2].x * v[0].y - v[0].x * v[2].y) / (v[1].x * (v[2].y - v[0].y) + (v[0].x - v[2].x) * v[1].y + v[2].x * v[0].y - v[0].x * v[2].y);
+		const c3 = (x * (v[0].y - v[1].y) + (v[1].x - v[0].x) * y + v[0].x * v[1].y - v[1].x * v[0].y) / (v[2].x * (v[0].y - v[1].y) + (v[1].x - v[0].x) * v[2].y + v[0].x * v[1].y - v[1].x * v[0].y);
+		return [c1, c2, c3];
+	}
+
+	interpolate(alpha: number, beta: number, gamma: number, vert1: Vector3 | Vector2, vert2: Vector3 | Vector2, vert3: Vector3 | Vector2, weight: number) {
+		//@ts-ignore
+		if (vert1.isVector3) {
+			//@ts-ignore
+			return vert1.clone().multiplyScalar(alpha).add(vert2.clone().multiplyScalar(beta)).add(vert3.clone().multiplyScalar(gamma)).divideScalar(weight);
+		}
+
+		//@ts-ignore
+		// if (vert1.isVector2) {
+		// 	//@ts-ignore
+		// 	let u = alpha * vert1[0] + beta * vert2[0] + gamma * vert3[0];
+		// 	//@ts-ignore
+		// 	let v = alpha * vert1[1] + beta * vert2[1] + gamma * vert3[1];
+
+		// 	u /= weight;
+		// 	v /= weight;
+
+		// 	return new Vector2(u, v);
+		// }
 	}
 
 	private createScene() {

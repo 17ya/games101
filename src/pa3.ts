@@ -6,6 +6,7 @@ import { Matrix4, Vector2, Vector3, Vector4 } from 'three';
 import { OBJLoader } from './js/OBJLoader.js';
 import Triangle from './Triangle';
 import Rasterizer from './Rasterizer';
+import Shader from './Shader';
 
 const { cos, sin, tan, PI } = Math;
 
@@ -48,9 +49,9 @@ function get_projection_matrix(eye_fov: number, aspect_ratio: number, zNear: num
 	return persp2Ortho.multiply(scale.multiply(trans));
 }
 
-function normal_fragment_shader(v: Vector4) {
-	const color = new Vector3(v.x, v.y, v.z).add(new Vector3(1, 1, 1)).divideScalar(2);
-	return [color.x * 255, color.y * 255, color.z * 255];
+function normal_fragment_shader(payload: Shader) {
+	const returnColor = payload.normal.normalize().add(new Vector3(1, 1, 1)).divideScalar(2);
+	return new Vector3(returnColor.x * 255, returnColor.y * 255, returnColor.z * 255);
 }
 
 function vertexShader(payload: any) {
@@ -59,7 +60,7 @@ function vertexShader(payload: any) {
 
 function main() {
 	const loader = new OBJLoader();
-	const angle = -140;
+	const angle = -50;
 	const triangleList: Triangle[] = [];
 
 	loader.load('./models/spot_triangulated_good.obj', (materials: any) => {
