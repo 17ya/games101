@@ -83,7 +83,7 @@ class Rasterizer {
 		return false;
 	}
 
-	rasterizeTriangle(t: Triangle, viewPos: Vector3) {
+	rasterizeTriangle(t: Triangle, viewPos: Vector3[]) {
 		const v = t.toVector4();
 
 		const minX = Math.floor(Math.min(v[0].x, v[1].x, v[2].x));
@@ -120,10 +120,11 @@ class Rasterizer {
 						this.depth_buf[this.getIndex(x, y)] = zp;
 						const interpolated_color = this.interpolate(alpha, beta, gamma, t.color[0], t.color[1], t.color[2], 1) as Vector3;
 						const interpolated_normal = this.interpolate(alpha, beta, gamma, t.normal[0], t.normal[1], t.normal[2], 1) as Vector3;
-						// const interpolated_texcoords = this.interpolate(alpha, beta, gamma, t.texCoord[0], t.texCoord[1], t.texCoord[2], 1) as Vector2;
-						// const interpolated_shadingcoords =  this.interpolate(alpha, beta, gamma, view_pos[0], view_pos[1], view_pos[2], 1);
+						const interpolated_texcoords = this.interpolate(alpha, beta, gamma, t.texCoord[0], t.texCoord[1], t.texCoord[2], 1) as Vector2;
+						const interpolated_shadingcoords = this.interpolate(alpha, beta, gamma, viewPos[0], viewPos[1], viewPos[2], 1) as Vector3;
+						// console.log(interpolated_texcoords);
 
-						const payload = new Shader(interpolated_color, interpolated_normal.normalize());
+						const payload = new Shader(interpolated_color, interpolated_normal.normalize(), interpolated_texcoords, interpolated_shadingcoords);
 
 						const pixelColor = this.fragmentShader(payload);
 
@@ -144,10 +145,15 @@ class Rasterizer {
 			const t = triangleList[i];
 			const newtri = new Triangle();
 
+			// 计算 viewpace
+			const viewspace_pos = [];
+			for (let i = 0; i < 3; i++) {
+				const { x: tx, y: ty, z: tz } = t.v[i].clone().applyMatrix4(this.model).applyMatrix4(this.view);
+				viewspace_pos.push(new Vector3(tx, ty, tz));
+			}
+
 			//mvp变换
-
 			const v: Vector4[] = [this.ve4MultiplyMat4(t.v[0], mvp), this.ve4MultiplyMat4(t.v[1], mvp), this.ve4MultiplyMat4(t.v[2], mvp)];
-
 			for (let vi = 0; vi < v.length; vi++) {
 				v[vi].x /= v[vi].w;
 				v[vi].y /= v[vi].w;
@@ -174,8 +180,6 @@ class Rasterizer {
 			newtri.setColor(148, 121.0, 92.0);
 			newtri.setColor(148, 121.0, 92.0);
 			newtri.setColor(148, 121.0, 92.0);
-
-			const viewspace_pos = new Vector3();
 
 			this.rasterizeTriangle(newtri, viewspace_pos);
 		}
@@ -247,17 +251,17 @@ class Rasterizer {
 		}
 
 		//@ts-ignore
-		// if (vert1.isVector2) {
-		// 	//@ts-ignore
-		// 	let u = alpha * vert1[0] + beta * vert2[0] + gamma * vert3[0];
-		// 	//@ts-ignore
-		// 	let v = alpha * vert1[1] + beta * vert2[1] + gamma * vert3[1];
+		if (vert1.isVector2) {
+			//@ts-ignore
+			let u = alpha * vert1[0] + beta * vert2[0] + gamma * vert3[0];
+			//@ts-ignore
+			let v = alpha * vert1[1] + beta * vert2[1] + gamma * vert3[1];
 
-		// 	u /= weight;
-		// 	v /= weight;
+			u /= weight;
+			v /= weight;
 
-		// 	return new Vector2(u, v);
-		// }
+			return new Vector2(u, v);
+		}
 	}
 
 	private createScene() {

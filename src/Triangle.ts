@@ -4,7 +4,7 @@ class Triangle {
 	v: Vector4[] = [];
 	normal: Vector3[] = [];
 	color: Vector3[] = [];
-	texCoord: Vector2[] = [];
+	texCoord: Vector2[] = [new Vector2(0, 0)];
 
 	constructor() {}
 
@@ -33,7 +33,7 @@ class Triangle {
 	}
 
 	setTexCoord(vec2: Vector2) {
-		this.texCoord.push(vec2);
+		this.texCoord.unshift(vec2);
 	}
 
 	setColors(uv: Vector3) {

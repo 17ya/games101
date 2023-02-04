@@ -6,10 +6,11 @@ class Shader {
 	viewPos: Vector3 = new Vector3();
 	texCoords: Vector2 = new Vector2();
 
-	constructor(color: Vector3, normal: Vector3, texCoords?: Vector2) {
+	constructor(color: Vector3, normal: Vector3, texCoords: Vector2, viewPos: Vector3) {
 		this.color = color;
 		this.normal = normal;
-		// this.texCoords = texCoords;
+		this.texCoords = texCoords;
+		this.viewPos = viewPos;
 	}
 }
 
